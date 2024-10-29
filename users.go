@@ -57,12 +57,12 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, req *http.Request) {
 	type parameters struct {
 		Password string `json:"password"`
 		Email string `json:"email"`
-		ExpiresInSeconds int `json:"expires_in_seconds"`
 	}
 
 	type returnVals struct {
 		User
 		Token string `json:"token"`
+		RefreshToken string `json:"refresh_token"`
 	}
 
 	decoder := json.NewDecoder(req.Body)
@@ -84,11 +84,21 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, req *http.Request) {
 		return 
 	}
 
-	expiresInSeconds := data.ExpiresInSeconds
-	if expiresInSeconds == 0 || expiresInSeconds > 3600{
-		expiresInSeconds = 3600
+	refreshToken, err := auth.MakeRefreshToken()
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "refresh token error", err)
+		return
 	}
-	token, err := auth.MakeJWT(user.ID, cfg.secret, time.Duration(expiresInSeconds) * time.Second)
+
+	if err := cfg.database.CreateRefreshToken(req.Context(), database.CreateRefreshTokenParams{
+		UserID: user.ID,
+		Token: refreshToken,
+	},); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "refresh token error", err)
+		return
+	}
+
+	token, err := auth.MakeJWT(user.ID, cfg.secret, time.Hour)
 	if err != nil {
 		respondWithError(w, 500, "Making token error", err)
 		return
@@ -102,5 +112,51 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, req *http.Request) {
 			Email: user.Email,
 		},
 		Token: token,
+		RefreshToken: refreshToken,
 	})
+}
+
+
+func (cfg *apiConfig) handlerRefresh(w http.ResponseWriter, req *http.Request) {
+	type returnVals struct {
+		Token string `json:"token"`
+	}
+
+	refreshToken, err := auth.GetBearerToken(req.Header)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Couldn't find token", err)
+		return
+	}
+
+	user, err := cfg.database.GetUserFromRefreshToken(req.Context(), refreshToken)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Couldn't get user for refresh token", err)
+		return
+	}
+
+	token, err := auth.MakeJWT(user.ID, cfg.secret, time.Hour)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Couldn't validate token", err)
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, returnVals{
+		Token: token,
+	})
+}
+
+func (cfg *apiConfig) handlerRevoke(w http.ResponseWriter, r *http.Request) {
+	refreshToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Couldn't find token", err)
+		return
+	}
+
+	_, err = cfg.database.RevokeRefreshToken(r.Context(), refreshToken)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't revoke session", err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
