@@ -30,6 +30,7 @@ func main(){
 		fileserverHits: atomic.Int32{},
 		database: database.New(db),
 		platform: os.Getenv("PLATFORM"),
+		secret: os.Getenv("SECRET"),
 	}
 
 	serveMux := http.NewServeMux()
@@ -41,6 +42,7 @@ func main(){
 	serveMux.HandleFunc("POST /api/chirps", cfg.handlerCreateChirp)
 	serveMux.HandleFunc("GET /api/chirps", cfg.handlerGetChirps)
 	serveMux.HandleFunc("GET /api/chirps/{chirpID}", cfg.handlerGetChirp)
+	serveMux.HandleFunc("POST /api/login", cfg.handlerLogin)
 
 	server := http.Server{Handler: serveMux, Addr: ":" + port}
 	err = server.ListenAndServe()

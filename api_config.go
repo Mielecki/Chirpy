@@ -12,6 +12,7 @@ type apiConfig struct {
 	fileserverHits atomic.Int32
 	database *database.Queries
 	platform string
+	secret string
 }
 
 func (cfg *apiConfig) handlerReset(w http.ResponseWriter, req *http.Request) {

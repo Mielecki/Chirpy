@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mielecki/Chirpy/internal/auth"
 	"github.com/Mielecki/Chirpy/internal/database"
 	"github.com/google/uuid"
 )
@@ -21,7 +22,18 @@ type Chirp struct {
 func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, req *http.Request) {
 	type parameters struct {
 		Body string `json:"body"`
-		UserID uuid.UUID `json:"user_id"`
+	}
+
+	token, err := auth.GetBearerToken(req.Header)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Getting token error", err)
+		return
+	}
+
+	userID, err := auth.ValidateJWT(token, cfg.secret)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Invalid token", err)
+		return
 	}
 
 	decoder := json.NewDecoder(req.Body)
@@ -38,7 +50,7 @@ func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, req *http.Reques
 
 	chirp, err := cfg.database.CreateChirp(req.Context(), database.CreateChirpParams{
 		Body: data.Body,
-		UserID: data.UserID,
+		UserID: userID,
 	})
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Creating chrip error", err)
