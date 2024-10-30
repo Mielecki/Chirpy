@@ -31,6 +31,7 @@ func main(){
 		database: database.New(db),
 		platform: os.Getenv("PLATFORM"),
 		secret: os.Getenv("SECRET"),
+		polkaKey: os.Getenv("POLKA_KEY"),
 	}
 
 	serveMux := http.NewServeMux()
@@ -47,6 +48,7 @@ func main(){
 	serveMux.HandleFunc("POST /api/revoke", cfg.handlerRevoke)
 	serveMux.HandleFunc("PUT /api/users", cfg.handlerUpdateUser)
 	serveMux.HandleFunc("DELETE /api/chirps/{chirpID}", cfg.handlerDelete)
+	serveMux.HandleFunc("POST /api/polka/webhooks", cfg.handlerPolka)
 
 	server := http.Server{Handler: serveMux, Addr: ":" + port}
 	err = server.ListenAndServe()

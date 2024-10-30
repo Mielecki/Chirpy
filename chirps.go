@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -89,11 +90,38 @@ func replaceProfane(s *string) {
 }
 
 func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, req *http.Request) {
-	chirps, err := cfg.database.GetAllChirps(req.Context())
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Getting chrips error", err)
-		return
+	author := req.URL.Query().Get("author_id")
+	sortOrder := req.URL.Query().Get("sort")
+	if sortOrder == "" || sortOrder != "desc" {
+		sortOrder = "asc"
 	}
+	var chirps []database.Chirp
+	var err error
+	if author == "" {
+		chirps, err = cfg.database.GetAllChirps(req.Context())
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Getting chrips error", err)
+			return
+		}
+	} else {
+		userID, err := uuid.Parse(author)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Parsing error", err)
+			return
+		}
+		chirps, err = cfg.database.GetAllChirpsByUserID(req.Context(), userID)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Getting chrips error", err)
+			return
+		}
+	}
+
+	sort.Slice(chirps, func(i, j int) bool {
+		if sortOrder == "desc" {
+			return chirps[i].CreatedAt.After(chirps[j].CreatedAt)
+		}
+		return chirps[i].CreatedAt.Before(chirps[j].CreatedAt)
+	})
 
 	chirpsJSON := []Chirp{}
 	
