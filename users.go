@@ -160,3 +160,52 @@ func (cfg *apiConfig) handlerRevoke(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNoContent)
 }
+
+
+func (cfg *apiConfig) handlerUpdateUser (w http.ResponseWriter, req *http.Request) {
+	type parameters struct {
+		Password string `json:"password"`
+		Email string `json:"email"`
+	}
+
+
+	token, err := auth.GetBearerToken(req.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Couldn't find token", err)
+		return
+	}
+
+	userID, err := auth.ValidateJWT(token, cfg.secret)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Couldn't validate token", err)
+		return
+	}
+
+	data := parameters{}
+	decoder := json.NewDecoder(req.Body)
+	if err := decoder.Decode(&data); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Docoding error", err)
+		return
+	}
+
+	hashedPassword, err := auth.HashPassword(data.Password)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Hashing password error", err)
+	}
+
+	user, err := cfg.database.UpdateUser(req.Context(), database.UpdateUserParams{
+		Email: data.Email,
+		HashedPassword: hashedPassword,
+		ID: userID,
+	})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Updating error", err)
+	}
+
+	respondWithJSON(w, http.StatusOK, User{
+		ID: user.ID,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+		Email: user.Email,
+	})
+}
